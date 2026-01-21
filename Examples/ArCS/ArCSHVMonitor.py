@@ -3,7 +3,7 @@
 Simple LJTick-DAC control and AIN monitor for a LabJack U3-HV.
 
 Usage:
-    python ArCSHVMonitor.py <num_channels> <set_output_HV> <dac0_voltage>
+    python ArCSHVMonitor.py <num_channels> <set_output_HV> <dac0_voltage> <run_seconds>
 
 Example:
     python ArCSHVMonitor.py 1 7.0
@@ -21,11 +21,6 @@ Notes:
     - AIN channels start at AIN0 and go up to AIN(num_channels - 1).
 """
 
-"""
-Need to test -5, -10, -15, -20, -22, -25, -27, -30 kV. 
-Glassman Power Supply model (LX125N16), maximum voltage is -125 kV.
-"""
-
 import os
 import sys
 import time
@@ -35,10 +30,12 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ljTickDac import LJTickDAC
+import argparse
 
 def parse_args():
-     if len(sys.argv) != 5:
-          print("Usage: python ArCSHVMonitor.py <num_channels> <set_output_HV> <dac0_voltage> <run_seconds>")
+     if len(sys.argv) not in (4, 5):
+          print("Usage:")
+          print("  python ArCSHVMonitor.py <num_channels> <set_output_HV> <dac0_voltage> [run_seconds]")
           sys.exit(1)
 
      try:
@@ -63,14 +60,15 @@ def parse_args():
           print("Error: <num_channels> must be between 1 and 4.")
           sys.exit(1)
      
-     try:
-          run_seconds = float(sys.argv[4])  # new argument
-     except ValueError:
-          print("Error: <run_seconds> must be a number (in seconds).")
-          sys.exit(1)
+     run_seconds = None
+     if len(sys.argv) == 5:
+          try:
+               run_seconds = float(sys.argv[4])
+          except ValueError:
+               print("Error: <run_seconds> must be a number (in seconds).")
+               sys.exit(1)
 
      return num_channels, set_output_HV, dac0_voltage, run_seconds
-
 
 def convertToDACAVoltage(HVVoltage):
      TotalVoltage = -125.0  # kV
@@ -147,12 +145,15 @@ def main():
                     else:
                          file.write(f"{name}\n")
                          print(f"{name}\n", end="")
-               #i=0
-               #while True:
+
+               i = 0 
                start = time.time()
-               i = 0
+               print("Running continuously (Ctrl+C to stop)")
                try:
-                    while time.time() - start < run_seconds:
+                    while True:
+                         # Stop condition for timed mode
+                         if run_seconds is not None and (time.time() - start) >= run_seconds:
+                              break
                          readings = []
                          readings.append(f"{dac0_voltage:.5f}")
                          readings.append(f"{ljtick_daca_voltage:.5f}")
@@ -164,15 +165,13 @@ def main():
                          file.write("\t".join(readings) + "\n")
                          time.sleep(0.5)
                          i+=1
-                    file.close()
                except KeyboardInterrupt:
                     print("\nStopping monitor.")
                     file.close()
                finally:       
                     dev.close()
-
-     except KeyboardInterrupt:
-          print("\nStopping monitor.")
+     except Exception as e:
+          print(f"An error occurred: {e}")
      finally:
           dev.close()
 
